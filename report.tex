@@ -1,0 +1,358 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+
+% Assembly style
+\lstdefinestyle{AsmStyle}{
+    language={[x86masm]Assembler},
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!40!black},
+    numbers=left,
+    numberstyle=\tiny,
+    breaklines=true,
+    frame=single,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=4,
+    columns=flexible,
+    keepspaces=true,
+    literate={%
+        {\%}{\%}1
+    }
+}
+
+\title{Project 2 Report: \texttt{schedsim}\\
+\large CMPE 230 Systems Programming -- Spring 2026}
+
+\author{
+Yi\u{g}it Sarp Avc\i{}, 2023400048 \\
+Do\u{g}ukan Sungu, 2023400210
+}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Project Overview}
+
+Our scheduler simulator (\texttt{schedsim}) is a self-contained x86-64 GNU Assembly program that reads a single input line from standard input, determines which CPU scheduling algorithm to use, parses the associated process descriptors, simulates each clock cycle of the scheduler, and writes the resulting execution timeline string to standard output.
+
+The program supports five scheduling algorithms:
+\begin{itemize}
+    \item \textbf{FCFS} -- First Come First Serve (non-preemptive, arrival-based)
+    \item \textbf{SJF} -- Shortest Job First (non-preemptive, all arrive at time 0)
+    \item \textbf{SRTF} -- Shortest Remaining Time First (preemptive)
+    \item \textbf{PF} -- Priority First (preemptive, lower value = higher priority)
+    \item \textbf{RR} -- Round Robin (quantum-based, cyclic)
+\end{itemize}
+
+The overall execution flow is:
+\begin{enumerate}
+    \item Read up to 256 bytes from \texttt{stdin} via the \texttt{sys\_read} syscall.
+    \item Null-terminate the input buffer.
+    \item Parse the first token to determine the algorithm type.
+    \item Parse all process descriptors (and the quantum for RR) from the remaining input.
+    \item Dispatch to the appropriate scheduling routine.
+    \item Write the accumulated output buffer to \texttt{stdout} followed by a newline.
+    \item Exit via \texttt{sys\_exit} with code 0.
+\end{enumerate}
+
+
+\section{Parsing Logic}
+
+\subsection{Input Processing Strategy}
+
+The input line is a single string containing space-separated tokens. The first token identifies the algorithm (e.g., ``FCFS'', ``SJF'', ``SRTF'', ``PF'', ``RR''). Each subsequent token is a process descriptor whose fields are separated by hyphens.
+
+Our parsing operates in two phases:
+\begin{enumerate}
+    \item \textbf{Algorithm detection}: We inspect the first one or two characters of the input buffer. The character `F' indicates FCFS, `P' indicates PF, `R' indicates RR, and `S' requires a second-character check (`J' for SJF, `R' for SRTF). After identification, we advance the input pointer past the algorithm token and its trailing space.
+    \item \textbf{Process descriptor parsing}: Starting from the position after the algorithm token, we iterate over space-separated tokens. For each token, we extract the process ID (a single uppercase letter), skip the hyphen delimiter, and accumulate the burst time digit by digit. Depending on the algorithm type, we then extract additional fields (arrival time, priority) in the same manner.
+\end{enumerate}
+
+For Round Robin, the last token in the input has no hyphen -- it is the quantum value. We detect this by scanning ahead in the current token to check for the presence of a hyphen before deciding whether to parse it as a process descriptor or as the quantum.
+
+\subsection{Register-Level Parsing Design}
+
+During parsing:
+\begin{itemize}
+    \item \texttt{rsi} serves as the \textbf{input pointer}, advancing character by character through the input buffer. It is loaded with the base address of \texttt{input\_buf} and incremented after each character is consumed.
+    \item \texttt{rax} is used as the \textbf{numeric accumulator}. For each digit character, we compute \texttt{rax = rax * 10 + (char - '0')} using the \texttt{imul} instruction for the multiply and an \texttt{add} for the digit value.
+    \item \texttt{ecx} (the lower 32 bits of \texttt{rcx}) holds the current character being examined, loaded via \texttt{movzbl (\%rsi), \%ecx} which zero-extends the byte to avoid sign issues.
+    \item \texttt{r12} serves as the \textbf{process counter}, tracking how many processes have been parsed so far.
+    \item \texttt{r14} holds the \textbf{algorithm type code} (0--4) so that field parsing logic can branch accordingly.
+    \item \texttt{rdi} is used as a \textbf{temporary base pointer} for storing parsed values into the appropriate arrays (e.g., \texttt{proc\_burst}, \texttt{proc\_arrival}) using scaled indexed addressing \texttt{(\%rdi, \%r12, 8)}.
+\end{itemize}
+
+Correctness is maintained by:
+\begin{itemize}
+    \item Resetting \texttt{rax} to zero with \texttt{xor \%rax, \%rax} before each numeric field parse.
+    \item Checking delimiter characters (hyphen, space, null, newline, carriage return) explicitly to terminate digit accumulation.
+    \item Using separate parsing loops for each field, with clear transitions between them.
+\end{itemize}
+
+
+\section{State Representation (Memory Layout)}
+
+\subsection{Process Representation}
+
+Each process is represented using \textbf{parallel arrays} stored in the \texttt{.bss} section. Every array has space for 10 entries, each 8 bytes (quad-word) wide, for a total of 80 bytes per array:
+
+\begin{itemize}
+    \item \texttt{proc\_id[10]} -- stores the ASCII character of the process ID (e.g., 65 for `A'). Although only one byte is needed, we use 8-byte slots for uniform indexed addressing.
+    \item \texttt{proc\_burst[10]} -- the original burst time of each process.
+    \item \texttt{proc\_arrival[10]} -- the arrival time (set to 0 for SJF and RR where all processes arrive simultaneously).
+    \item \texttt{proc\_remaining[10]} -- the remaining burst time, initialized to the burst time during parsing and decremented during simulation.
+    \item \texttt{proc\_priority[10]} -- the priority value (used only by the PF algorithm).
+\end{itemize}
+
+This parallel-array design simplifies iteration: given a process index \texttt{i} in a register, we access any attribute via \texttt{base\_address + i * 8} using x86-64 scaled indexing mode.
+
+\subsection{Global State}
+
+\begin{itemize}
+    \item \texttt{proc\_count} (8 bytes) -- the number of processes parsed from the input.
+    \item \texttt{algo\_type} (8 bytes) -- an integer code identifying the algorithm (0=FCFS, 1=SJF, 2=SRTF, 3=PF, 4=RR).
+    \item \texttt{quantum\_val} (8 bytes) -- the quantum value for Round Robin.
+    \item \texttt{output\_buf} (1200 bytes) -- the timeline output buffer. Characters are appended sequentially.
+    \item \texttt{output\_len} (8 bytes) -- the current number of characters in \texttt{output\_buf}, used as the write index.
+    \item \texttt{input\_buf} (256 bytes) -- the raw input read from stdin.
+\end{itemize}
+
+For Round Robin, additional state manages the circular queue:
+\begin{itemize}
+    \item \texttt{rr\_queue[10]} -- an array of process indices (8 bytes each).
+    \item \texttt{rr\_head}, \texttt{rr\_tail}, \texttt{rr\_count} -- head pointer, tail pointer, and element count for the circular queue, each 8 bytes.
+\end{itemize}
+
+\subsection{Mandatory Diagram (Hand-Drawn)}
+
+\textit{(A hand-drawn diagram will be included here in the final submission.)}
+
+
+\section{Register Usage Strategy}
+
+Our register allocation is designed to minimize memory accesses during the hot scheduling loops:
+
+\begin{itemize}
+    \item \texttt{rsi} -- input buffer pointer during parsing; buffer address for syscalls during output.
+    \item \texttt{rdi} -- base address pointer for array accesses (loaded via \texttt{lea} before each array operation); file descriptor for syscalls.
+    \item \texttt{rax} -- numeric accumulator during parsing; syscall number; general-purpose temporary.
+    \item \texttt{rbx} -- holds intermediate comparison values (e.g., arrival time of current candidate) and the process ID character during burst output loops.
+    \item \texttt{rcx} -- loop counter for process iteration; character holder during parsing; burst count during output loops.
+    \item \texttt{rbp} -- current simulation time (clock cycle counter) in FCFS, SRTF, and PF.
+    \item \texttt{r8} -- best candidate's metric during selection (e.g., minimum remaining time in SRTF, best priority in PF).
+    \item \texttt{r9} -- index of the currently selected best process.
+    \item \texttt{r10} -- secondary comparison value (e.g., remaining time of the best candidate in PF for tie-breaking).
+    \item \texttt{r11} -- temporary register for priority comparisons.
+    \item \texttt{r12} -- process counter during parsing; outer loop index during sorting/running.
+    \item \texttt{r13} -- key process index during sorting; current process index during execution.
+    \item \texttt{r14} -- algorithm type code during parsing; quantum value in RR.
+    \item \texttt{r15} -- total process count (loaded once and used throughout).
+\end{itemize}
+
+All callee-saved registers (\texttt{rbx}, \texttt{r12}--\texttt{r15}, \texttt{rbp}) are pushed onto the stack at the beginning of each major function and restored before returning or jumping to the output routine. This prevents corruption across function calls and ensures the \texttt{append\_output} helper (which is called frequently) does not disturb the scheduling loop state.
+
+
+\section{Scheduling Logic}
+
+\subsection{Clock Cycle Simulation}
+
+Each algorithm follows a common pattern:
+\begin{enumerate}
+    \item \textbf{Determine eligible processes}: Check which processes have arrived (arrival $\leq$ current\_time) and have remaining burst time $>$ 0.
+    \item \textbf{Select the next process}: Apply the algorithm-specific selection criterion with the appropriate tie-breaking rules.
+    \item \textbf{Append output}: Write the selected process's ID character (or `X' for idle) to the output buffer via \texttt{append\_output}.
+    \item \textbf{Update state}: Decrement the selected process's remaining time, increment the current time.
+    \item \textbf{Check termination}: Continue until all processes have zero remaining time.
+\end{enumerate}
+
+\subsection{Algorithm Implementations}
+
+\textbf{FCFS (First Come First Serve):}
+We sort the process indices by arrival time using a \textbf{stable insertion sort} on a stack-allocated order array. Stability ensures that processes with equal arrival times preserve their input order. After sorting, we iterate through the sorted order, outputting idle cycles (`X') whenever there is a gap between the end of one process and the arrival of the next, then outputting the process's ID for each of its burst cycles.
+
+\textbf{SJF (Shortest Job First):}
+All processes arrive at time 0. We sort the process indices by burst time using the same stable insertion sort. The sorted order is then executed sequentially -- each process runs to completion before the next begins. No idle cycles occur since all arrive at time 0.
+
+\textbf{SRTF (Shortest Remaining Time First):}
+This is a per-cycle preemptive algorithm. At each clock cycle, we iterate over all processes and find the one with the smallest remaining time among those that have arrived and are not yet complete. Ties are broken by input order (lower index wins, since we use a strict less-than comparison and skip equals). The selected process runs for one cycle, its remaining time is decremented, and the loop continues.
+
+\textbf{PF (Priority First):}
+Similar to SRTF but the primary selection criterion is the priority value (lower number = higher priority). The tie-breaking cascade is:
+\begin{enumerate}
+    \item Lower priority number wins.
+    \item If priorities are equal, shorter remaining time wins.
+    \item If both are equal, the process appearing first in the input wins (lower index).
+\end{enumerate}
+This is implemented by maintaining three ``best'' registers: \texttt{r8} for best priority, \texttt{r10} for best remaining time, and \texttt{r9} for best index. Each candidate is compared against these values in the specified order.
+
+\textbf{RR (Round Robin):}
+We use a \textbf{circular queue} (array-based, with head/tail pointers wrapping at index 10). All processes are enqueued in input order at initialization. The main loop dequeues the front process, runs it for $\min(\text{remaining}, \text{quantum})$ active cycles, then:
+\begin{itemize}
+    \item If the process finishes within its quantum, the remaining quantum cycles are padded with `X' (idle). The process is not re-enqueued.
+    \item If the process still has remaining burst time after the full quantum, it is re-enqueued at the back of the queue.
+\end{itemize}
+The loop terminates when the queue is empty.
+
+
+\section{Control Flow Design}
+
+The program is structured as follows:
+
+\begin{itemize}
+    \item \textbf{\_start}: Entry point. Performs the read syscall, calls \texttt{parse\_algorithm} and \texttt{parse\_processes}, then dispatches to the appropriate algorithm label via a comparison chain on \texttt{algo\_type}.
+    \item \textbf{parse\_algorithm}: Examines the first characters of the input to identify the algorithm and advances the input pointer past the algorithm token.
+    \item \textbf{parse\_processes}: A loop that iterates over space-separated tokens, parsing each as a process descriptor. Contains nested loops for digit accumulation and branching for different field counts depending on the algorithm.
+    \item \textbf{run\_*}: Each algorithm's scheduling loop. For non-preemptive algorithms (FCFS, SJF), this includes a sorting phase followed by a sequential execution phase. For preemptive algorithms (SRTF, PF), the main loop iterates per clock cycle. For RR, the main loop iterates per quantum slot.
+    \item \textbf{append\_output}: A small helper that appends a single character to \texttt{output\_buf} and increments \texttt{output\_len}. Uses push/pop to preserve caller registers.
+    \item \textbf{do\_output}: Writes \texttt{output\_buf} to stdout via \texttt{sys\_write}, writes a newline, then exits via \texttt{sys\_exit}.
+\end{itemize}
+
+Control flow within each function relies on:
+\begin{itemize}
+    \item \textbf{Conditional jumps} (\texttt{je}, \texttt{jne}, \texttt{jl}, \texttt{jg}, \texttt{jle}, \texttt{jge}) for comparisons and branching.
+    \item \textbf{Unconditional jumps} (\texttt{jmp}) for loop back-edges and algorithm dispatch.
+    \item \textbf{call/ret} for the \texttt{parse\_algorithm}, \texttt{parse\_processes}, and \texttt{append\_output} functions.
+    \item Loop patterns follow the standard assembly idiom: initialize counter, begin loop label, check termination condition, perform body, update counter, jump back.
+\end{itemize}
+
+
+\section{Representative Code Snippet}
+
+The following snippet shows the SRTF per-cycle selection loop, which is representative of our approach to preemptive scheduling:
+
+\begin{lstlisting}[style=AsmStyle]
+.srtf_select:
+    cmp     %r15, %rcx          # rcx < proc_count?
+    jge     .srtf_select_done
+
+    # Skip completed processes
+    lea     proc_remaining(%rip), %rdi
+    movq    (%rdi, %rcx, 8), %rax
+    cmp     $0, %rax
+    jle     .srtf_select_next
+
+    # Skip processes that haven't arrived
+    lea     proc_arrival(%rip), %rdi
+    movq    (%rdi, %rcx, 8), %rbx
+    cmp     %rbp, %rbx          # arrival <= current_time?
+    jg      .srtf_select_next
+
+    # Update best if remaining < current minimum
+    cmp     %r8, %rax
+    jge     .srtf_select_next   # >= means skip (tie = keep first)
+
+    mov     %rax, %r8           # new minimum remaining
+    mov     %rcx, %r9           # new best index
+
+.srtf_select_next:
+    inc     %rcx
+    jmp     .srtf_select
+\end{lstlisting}
+
+This loop iterates over all processes. For each:
+\begin{itemize}
+    \item We load its remaining time into \texttt{rax} using scaled indexed addressing from the \texttt{proc\_remaining} array.
+    \item We skip it if remaining is zero (done) or if its arrival time exceeds the current time (\texttt{rbp}).
+    \item We compare its remaining time against the current best in \texttt{r8}. The \texttt{jge} instruction ensures ties are broken by keeping the first-found process (lower index).
+    \item If a new minimum is found, we update \texttt{r8} (best remaining) and \texttt{r9} (best index).
+\end{itemize}
+
+After the loop, \texttt{r9} holds the index of the selected process (or $-1$ if no process is available, indicating an idle cycle).
+
+
+\section{Testing and Debugging}
+
+\subsection{Testing Strategy}
+
+We tested our implementation using:
+\begin{itemize}
+    \item The 5 provided test cases covering all algorithms (FCFS, SJF, SRTF, PF, RR), including tie-breaking scenarios and edge cases.
+    \item The example inputs from the project specification document.
+    \item Additional hand-traced inputs focusing on:
+    \begin{itemize}
+        \item Multiple processes arriving at the same time step.
+        \item Processes with identical burst times, priorities, or remaining times.
+        \item The RR quantum boundary cases (process finishing exactly at quantum, finishing with 1 cycle left, etc.).
+        \item CPU idle periods between arrivals.
+    \end{itemize}
+    \item The automated grading script (\texttt{make grade}) which runs all test cases and compares output line-by-line.
+\end{itemize}
+
+\subsection{Debugging Approach}
+
+Since we are working in pure assembly without a debugger available on the test platform, our debugging relied on:
+\begin{itemize}
+    \item \textbf{Manual tracing}: For each failing test case, we traced through the assembly logic on paper, tracking register values and memory contents at each step.
+    \item \textbf{Incremental development}: We implemented algorithms one at a time, testing each before moving on to the next. FCFS and SJF were developed first (as the simpler non-preemptive cases), followed by SRTF, PF, and finally RR.
+    \item \textbf{Targeted output inspection}: When outputs differed from expected, we compared character by character to identify the exact cycle where the divergence occurred, then traced backward through the selection logic.
+\end{itemize}
+
+\subsection{Edge Cases}
+
+\begin{itemize}
+    \item \textbf{Multiple arrivals at the same time (FCFS, SRTF, PF)}: Handled by stable sorting (FCFS) or by iterating in input order and using strict less-than comparisons (SRTF, PF).
+    \item \textbf{Identical priorities with different remaining times (PF)}: The tie-breaking cascade (priority $\rightarrow$ remaining $\rightarrow$ input order) ensures deterministic behavior.
+    \item \textbf{Quantum partially used (RR)}: When a process finishes before the quantum expires, we pad the remaining cycles with `X' and do not switch to the next process mid-quantum.
+    \item \textbf{CPU idle periods}: In FCFS, if a gap exists between consecutive process arrivals, idle cycles are emitted. In SRTF and PF, if no process has arrived at the current time, an `X' is output.
+    \item \textbf{Circular queue overflow at 10 processes (RR)}: The tail pointer wraps around correctly when all 10 slots are occupied during initialization.
+\end{itemize}
+
+
+\section{Course Concepts}
+
+\subsection{Memory and Data Layout}
+
+Our use of parallel arrays in the \texttt{.bss} section directly applies the concept of manual memory layout. Each process attribute occupies a fixed-size slot computed from the base address plus the product of the index and the element size (8 bytes), implemented using x86-64 scaled indexed addressing modes.
+
+\subsection{Registers and Low-Level Computation}
+
+The entire program operates without any high-level abstractions. Arithmetic operations like the digit accumulation (\texttt{rax = rax * 10 + digit}) use direct register manipulation. Comparison-based selection in scheduling loops relies entirely on the CPU flags set by \texttt{cmp} instructions and conditional jumps.
+
+\subsection{Control Flow and Branching}
+
+Loops are implemented with the standard assembly pattern of a label, a termination check, a loop body, and a jump back. Nested loops (e.g., the sorting inner loop within the sorting outer loop) require careful management of multiple loop variables across registers. Algorithm dispatch uses a comparison chain rather than a jump table, which is simpler and sufficient for 5 cases.
+
+\subsection{Parsing Without Libraries}
+
+All string processing is manual. We do not use any C library functions -- not even \texttt{printf} or \texttt{atoi}. Character classification (digit detection) uses range comparisons against ASCII values. String-to-integer conversion is a digit-by-digit accumulation loop. Output is constructed by appending characters one at a time to a buffer and flushing with a single \texttt{sys\_write} call.
+
+\subsection{Tradeoffs}
+
+\begin{itemize}
+    \item \textbf{Simplicity vs.\ efficiency}: We chose insertion sort (O($n^2$)) over more efficient algorithms because $n \leq 10$ makes the difference negligible, and insertion sort is trivially stable and easy to implement correctly in assembly.
+    \item \textbf{Readability vs.\ performance}: We use 8-byte slots for single characters (process IDs) to maintain uniform addressing, trading memory for simpler code. Comments and clear label names enhance readability at no runtime cost.
+    \item \textbf{Static vs.\ dynamic design}: All buffers are statically allocated with fixed maximum sizes (10 processes, 1200-byte output). This avoids dynamic memory allocation complexity entirely, which is acceptable given the problem constraints.
+\end{itemize}
+
+
+\section{Conclusion}
+
+\begin{itemize}
+    \item \textbf{Strongest design decision}: The parallel-array memory layout with uniform 8-byte slots proved to be a very effective choice. It simplified all indexed accesses to a single addressing mode pattern and made it easy to add new fields (e.g., priority) without restructuring existing code.
+    \item \textbf{Biggest challenge}: The Round Robin algorithm was the most complex to implement due to the circular queue management, the quantum-based idle padding, and the interaction between finishing processes and the re-enqueue logic.
+    \item \textbf{Possible improvements}: A jump table could replace the comparison chain for algorithm dispatch. The sorting phases in FCFS and SJF could be replaced with selection-based approaches that avoid the stack-allocated order array. Additionally, more extensive error handling (e.g., for malformed input) could be added, though it is not required by the specification.
+\end{itemize}
+
+
+\section*{AI Usage Statement}
+
+Minor assistance from AI tools (ChatGPT) was used for syntax checking and grammar corrections in the report. All technical content, code design, and implementation logic were produced by the team members. We fully understand and can explain every aspect of the submitted code.
+
+\end{document}

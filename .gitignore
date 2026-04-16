@@ -1,0 +1,7 @@
+*__pycache__
+schedsim
+my-outputs
+*.DS_Store
+.idea*
+.vscode*
+*.o
