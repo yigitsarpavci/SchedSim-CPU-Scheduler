@@ -327,7 +327,12 @@ parse_processes:
     movq    $0, (%rdi, %r12, 8)
 
 .next_process:
+    lea     proc_burst(%rip), %rdi
+    movq    (%rdi, %r12, 8), %rax
+    cmp     $0, %rax
+    je      .skip_process
     inc     %r12
+.skip_process:
     jmp     .parse_loop
 
 .parse_done:
