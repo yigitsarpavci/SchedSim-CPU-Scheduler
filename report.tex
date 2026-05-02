@@ -129,7 +129,7 @@ This parallel-array design simplifies iteration: given a process index \texttt{i
     \item \texttt{proc\_count} (8 bytes) -- the number of processes parsed from the input.
     \item \texttt{algo\_type} (8 bytes) -- an integer code identifying the algorithm (0=FCFS, 1=SJF, 2=SRTF, 3=PF, 4=RR).
     \item \texttt{quantum\_val} (8 bytes) -- the quantum value for Round Robin.
-    \item \texttt{output\_buf} (1200 bytes) -- the timeline output buffer. Characters are appended sequentially.
+    \item \texttt{output\_buf} (4096 bytes) -- the timeline output buffer. Characters are appended sequentially.
     \item \texttt{output\_len} (8 bytes) -- the current number of characters in \texttt{output\_buf}, used as the write index.
     \item \texttt{input\_buf} (256 bytes) -- the raw input read from stdin, with one extra byte reserved for the null terminator.
 \end{itemize}
@@ -346,7 +346,16 @@ All string processing is manual. We do not use any C library functions -- not ev
 \end{itemize}
 
 
-\section{Conclusion}
+\section*{Technical Decisions for Robustness}
+To ensure stability and correctness across all possible edge cases, several critical design decisions were made:
+\begin{itemize}
+    \item \textbf{Cross-platform Line Endings}: The parser explicitly handles both LF (\texttt{\textbackslash n}) and CRLF (\texttt{\textbackslash r\textbackslash n}) line endings, ensuring compatibility whether the input is generated on Linux, Windows, or macOS.
+    \item \textbf{Large-Scale Output Support}: The output buffer was increased to 4096 bytes to accommodate high burst times (e.g., 10 processes with maximum burst values) without risk of overflow.
+    \item \textbf{Zero-Burst Filtering}: In accordance with TA forum clarifications, processes with a burst time of zero are entirely skipped during parsing, preventing unnecessary idle cycles or timeline anomalies.
+    \item \textbf{Deterministic Tie-breaking}: For all preemptive algorithms (SRTF, PF), a strict multi-level comparison cascade ensures that ties are always broken by the original input order (first-found wins).
+\end{itemize}
+
+\section*{Conclusion}
 
 \begin{itemize}
     \item \textbf{Strongest design decision}: The parallel-array memory layout with uniform 8-byte slots proved to be a very effective choice. It simplified all indexed accesses to a single addressing mode pattern and made it easy to add new fields (e.g., priority) without restructuring existing code.
