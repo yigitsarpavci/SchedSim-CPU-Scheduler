@@ -5,3 +5,6 @@ my-outputs
 .idea*
 .vscode*
 *.o
+report.aux
+report.log
+report.out
