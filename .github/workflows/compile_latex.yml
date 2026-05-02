@@ -6,21 +6,27 @@ permissions:
 jobs:
   build_latex:
     runs-on: ubuntu-latest
+    container:
+      image: gokceuludogan/cmpe230-spring26:latest
+      options: --user root
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Install LaTeX dependencies
+        run: |
+          apt-get update && \
+          DEBIAN_FRONTEND=noninteractive apt-get install -y texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended texlive-pictures
+
       - name: Compile LaTeX
-        uses: xu-cheng/latex-action@v3
-        with:
-          root_file: report.tex
-          latexmk_use_lualatex: false
-          extra_system_packages: "texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra texlive-pictures texlive-science texlive-luatex ghostscript"
+        run: |
+          pdflatex -interaction=nonstopmode report.tex
 
       - name: Commit and push PDF
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add report.pdf
-          git commit -m "Auto-compile LaTeX report with new diagram" || echo "No changes to commit"
+          git commit -m "CI: Professional LaTeX build from Docker container" || echo "No changes to commit"
           git push
