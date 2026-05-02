@@ -63,7 +63,7 @@ The program supports five scheduling algorithms:
 
 The overall execution flow is:
 \begin{enumerate}
-    \item Read up to 256 bytes from \texttt{stdin} via the \texttt{sys\_read} syscall.
+    \item Read up to 255 bytes from \texttt{stdin} via the \texttt{sys\_read} syscall.
     \item Null-terminate the input buffer.
     \item Parse the first token to determine the algorithm type.
     \item Parse all process descriptors (and the quantum for RR) from the remaining input.
@@ -131,7 +131,7 @@ This parallel-array design simplifies iteration: given a process index \texttt{i
     \item \texttt{quantum\_val} (8 bytes) -- the quantum value for Round Robin.
     \item \texttt{output\_buf} (1200 bytes) -- the timeline output buffer. Characters are appended sequentially.
     \item \texttt{output\_len} (8 bytes) -- the current number of characters in \texttt{output\_buf}, used as the write index.
-    \item \texttt{input\_buf} (257 bytes) -- the raw input read from stdin, with one extra byte reserved for the null terminator.
+    \item \texttt{input\_buf} (256 bytes) -- the raw input read from stdin, with one extra byte reserved for the null terminator.
 \end{itemize}
 
 For Round Robin, additional state manages the circular queue:
