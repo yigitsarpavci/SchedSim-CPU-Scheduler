@@ -350,7 +350,7 @@ All string processing is manual. We do not use any C library functions -- not ev
 \begin{itemize}
     \item \textbf{Strongest design decision}: The parallel-array memory layout with uniform 8-byte slots proved to be a very effective choice. It simplified all indexed accesses to a single addressing mode pattern and made it easy to add new fields (e.g., priority) without restructuring existing code.
     \item \textbf{Biggest challenge}: The Round Robin algorithm was the most complex to implement due to the circular queue management, the quantum-based idle padding, and the interaction between finishing processes and the re-enqueue logic.
-    \item \textbf{Possible improvements}: A jump table could replace the comparison chain for algorithm dispatch. The sorting phases in FCFS and SJF could be replaced with selection-based approaches that avoid the stack-allocated order array. Additionally, more extensive error handling (e.g., for malformed input) could be added, though it is not required by the specification.
+    \item \textbf{Possible improvements}: A jump table could replace the comparison chain for algorithm dispatch. The sorting phases in FCFS and SJF could be replaced with selection-based approaches that avoid the stack-allocated order array. From a syntactic perspective, using assembler macros (\texttt{.macro}) for repetitive register saving/restoring blocks and defining system call numbers as constants (\texttt{.equ}) would further enhance code cleanliness and maintainability. Additionally, more extensive error handling (e.g., for malformed input) could be added, though it is not required by the specification.
 \end{itemize}
 
 
