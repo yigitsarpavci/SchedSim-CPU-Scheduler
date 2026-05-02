@@ -25,6 +25,8 @@ testcases: $(EXEC)
 grade: $(EXEC)
 	python3 test/grader.py ./$(EXEC) $(TEST_DIR)
 
+testgrade: testcases grade
+
 clean:
 	rm -f $(EXEC) $(OBJ)
 	rm -rf $(OUTPUT_DIR)
