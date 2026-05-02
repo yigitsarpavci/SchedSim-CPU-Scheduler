@@ -19,8 +19,8 @@
 .section .bss
 
 # I/O buffers
-input_buf:      .space 257          # raw input buffer plus null terminator
-output_buf:     .space 1200         # timeline output buffer
+input_buf:      .space 256          # raw input buffer plus null terminator
+output_buf:     .space 4096         # timeline output buffer (safe for 10 proc * 255 burst + padding)
 
 # Parallel arrays for up to 10 processes (8 bytes each, total 80 per array).
 # Using 8-byte slots even for single characters enables uniform scaled
@@ -819,7 +819,7 @@ run_pf:
     jg      .pf_select_next         # longer remaining -> skip
     jl      .pf_new_best            # shorter remaining -> new best
 
-    # Level 3: equal priority and remaining -> keep first (lower index)
+    # Level 3: equal priority and remaining -> first-found wins (stable: lower index)
     jmp     .pf_select_next
 
 .pf_new_best:
