@@ -22,10 +22,10 @@ testcases: $(EXEC)
 		./$(EXEC) < $$infile > $(OUTPUT_DIR)/$$outfile; \
 	done
 
-grade: $(EXEC)
+grade: testcases
 	python3 test/grader.py ./$(EXEC) $(TEST_DIR)
 
-testgrade: testcases grade
+testgrade: grade
 
 clean:
 	rm -f $(EXEC) $(OBJ)

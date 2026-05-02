@@ -7,7 +7,7 @@ jobs:
   grade:
     runs-on: ubuntu-latest
     container: 
-      image: gokceuludogan/cmpe230_spring25:latest
+      image: gokceuludogan/cmpe230-spring26:latest
       options: --user root
     timeout-minutes: 5
     steps:
@@ -25,13 +25,9 @@ jobs:
             exit 1
           fi
       
-      - name: Run testcases
-        run: 
-          make testcases
-
       - name: Grade
         run: |
-          make grade -s > grade.txt
+          make testgrade -s > grade.txt
           cat grade.txt
 
       - name: Save Grade to Summary and Environment

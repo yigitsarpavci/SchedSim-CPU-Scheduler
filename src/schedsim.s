@@ -19,7 +19,7 @@
 .section .bss
 
 # I/O buffers
-input_buf:      .space 256          # raw input buffer (max input size)
+input_buf:      .space 257          # raw input buffer plus null terminator
 output_buf:     .space 1200         # timeline output buffer
 
 # Parallel arrays for up to 10 processes (8 bytes each, total 80 per array).
@@ -352,7 +352,7 @@ parse_processes:
 #
 # Appends a single character to output_buf and increments output_len.
 # Input:  %al = character to append
-# Preserves all caller registers via push/pop.
+# Preserves the temporary registers it uses (%rdi and %rcx).
 ##############################################################################
 append_output:
     push    %rdi
@@ -643,7 +643,6 @@ run_sjf:
 # Register usage:
 #   r15 = process count      rbp = current_time
 #   r8  = best remaining     r9  = best index (-1 = none)
-#   r14 = total burst        r13 = simulation upper bound
 ##############################################################################
 run_srtf:
     push    %rbx
@@ -657,36 +656,6 @@ run_srtf:
     movq    (%rdi), %r15
 
     xor     %rbp, %rbp              # current_time = 0
-
-    # Sum all burst times to compute simulation upper bound
-    xor     %r14, %r14
-    xor     %rcx, %rcx
-.srtf_total:
-    cmp     %r15, %rcx
-    jge     .srtf_calc_end
-    lea     proc_burst(%rip), %rdi
-    addq    (%rdi, %rcx, 8), %r14
-    inc     %rcx
-    jmp     .srtf_total
-
-.srtf_calc_end:
-    # Find max arrival to set upper bound: max_arrival + total_burst
-    xor     %r13, %r13
-    xor     %rcx, %rcx
-.srtf_max_arrival:
-    cmp     %r15, %rcx
-    jge     .srtf_max_arrival_done
-    lea     proc_arrival(%rip), %rdi
-    movq    (%rdi, %rcx, 8), %rax
-    cmp     %rax, %r13
-    jge     .srtf_max_arrival_next
-    mov     %rax, %r13
-.srtf_max_arrival_next:
-    inc     %rcx
-    jmp     .srtf_max_arrival
-
-.srtf_max_arrival_done:
-    add     %r14, %r13              # r13 = upper bound
 
 .srtf_cycle:
     # Check termination: sum all remaining times
