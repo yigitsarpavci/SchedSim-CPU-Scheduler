@@ -14,6 +14,8 @@ jobs:
         uses: xu-cheng/latex-action@v3
         with:
           root_file: report.tex
+          latexmk_use_lualatex: false
+          extra_system_packages: "texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra texlive-pictures"
 
       - name: Commit and push PDF
         run: |
