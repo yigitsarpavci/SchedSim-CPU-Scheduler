@@ -2,6 +2,10 @@
 # schedsim.s - CPU Scheduling Simulator
 # x86-64 GNU Assembly (Linux)
 #
+# Authors:
+#   Yiğit Sarp Avcı, 2023400048
+#   Doğukan Sungu, 2023400210
+#
 # Supports five scheduling algorithms:
 #   FCFS  - First Come First Serve (non-preemptive, arrival-based)
 #   SJF   - Shortest Job First (non-preemptive, all arrive at 0)
