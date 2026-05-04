@@ -23,7 +23,8 @@
 .section .bss
 
 # I/O buffers
-input_buf:      .space 256          # raw input buffer plus null terminator
+input_buf:      .space 257          # 256-byte raw input buffer plus null terminator
+                .balign 8
 output_buf:     .space 4096         # timeline output buffer (safe for 10 proc * 255 burst + padding)
 
 # Parallel arrays for up to 10 processes (8 bytes each, total 80 per array).
@@ -46,9 +47,6 @@ rr_queue:       .space 80           # process indices in queue
 rr_head:        .space 8            # front pointer (dequeue index)
 rr_tail:        .space 8            # back pointer (enqueue index)
 rr_count:       .space 8            # current number of elements
-
-.section .data
-newline:        .byte 10
 
 .section .text
 .global _start
@@ -374,7 +372,7 @@ append_output:
 ##############################################################################
 # WRITE OUTPUT AND EXIT
 #
-# Writes output_buf to stdout, appends a newline, and exits with code 0.
+# Writes output_buf to stdout and exits with code 0.
 ##############################################################################
 do_output:
     mov     $1, %rax                # sys_write
