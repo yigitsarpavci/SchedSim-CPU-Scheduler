@@ -68,7 +68,7 @@ The overall execution flow is:
     \item Parse the first token to determine the algorithm type.
     \item Parse all process descriptors (and the quantum for RR) from the remaining input.
     \item Dispatch to the appropriate scheduling routine.
-    \item Write the accumulated output buffer to \texttt{stdout} followed by a newline.
+    \item Write the accumulated output buffer to \texttt{stdout}.
     \item Exit via \texttt{sys\_exit} with code 0.
 \end{enumerate}
 
@@ -224,7 +224,7 @@ The program is structured as follows:
     \item \textbf{parse\_processes}: A loop that iterates over space-separated tokens, parsing each as a process descriptor. Contains nested loops for digit accumulation and branching for different field counts depending on the algorithm.
     \item \textbf{run\_*}: Each algorithm's scheduling loop. For non-preemptive algorithms (FCFS, SJF), this includes a sorting phase followed by a sequential execution phase. For preemptive algorithms (SRTF, PF), the main loop iterates per clock cycle. For RR, the main loop iterates per quantum slot.
     \item \textbf{append\_output}: A small helper that appends a single character to \texttt{output\_buf} and increments \texttt{output\_len}. It preserves the temporary registers it uses.
-    \item \textbf{do\_output}: Writes \texttt{output\_buf} to stdout via \texttt{sys\_write}, writes a newline, then exits via \texttt{sys\_exit}.
+    \item \textbf{do\_output}: Writes \texttt{output\_buf} to stdout via \texttt{sys\_write}, then exits via \texttt{sys\_exit}.
 \end{itemize}
 
 Control flow within each function relies on:
