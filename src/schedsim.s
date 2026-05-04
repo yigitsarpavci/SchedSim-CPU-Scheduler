@@ -380,13 +380,6 @@ do_output:
     movq    (%rdx), %rdx
     syscall
 
-    # Write trailing newline
-    mov     $1, %rax
-    mov     $1, %rdi
-    lea     newline(%rip), %rsi
-    mov     $1, %rdx
-    syscall
-
     mov     $60, %rax               # sys_exit
     xor     %rdi, %rdi              # exit code 0
     syscall
