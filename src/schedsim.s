@@ -246,7 +246,11 @@ parse_processes:
 .store_quantum:
     lea     quantum_val(%rip), %rdi
     movq    %rax, (%rdi)
-    jmp     .parse_done
+    # Safety fix: if quantum is 0, default to 1 to prevent infinite loop
+    cmp     $0, %rax
+    jne     .parse_done
+    movq    $1, (%rdi)
+.parse_done:
 
 .parse_process_descriptor:
     # Field 1: process ID (single uppercase letter)
