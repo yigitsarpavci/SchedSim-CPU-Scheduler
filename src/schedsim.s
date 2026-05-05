@@ -63,6 +63,9 @@ _start:
     syscall
 
     # Null-terminate the input (rax = bytes read)
+    # Safety: check if read failed (rax < 0)
+    test    %rax, %rax
+    js      do_output               # skip if error
     lea     input_buf(%rip), %rsi
     movb    $0, (%rsi, %rax)
 
@@ -184,6 +187,10 @@ parse_processes:
     movq    (%rdi), %r14            # r14 = algorithm type
 
 .parse_loop:
+    # Safety: enforce maximum of 10 processes to prevent memory corruption
+    cmp     $10, %r12
+    jge     .parse_done
+
     # Skip leading spaces
     movzbl  (%rsi), %eax
     cmp     $' ', %al
@@ -680,7 +687,7 @@ run_srtf:
     je      .srtf_done
 
     # Select: find arrived process with smallest remaining time
-    movq    $999999, %r8            # best remaining (sentinel)
+    movabsq $0x7FFFFFFFFFFFFFFF, %r8  # best remaining (sentinel)
     movq    $-1, %r9                # best index (none)
     xor     %rcx, %rcx
 
@@ -790,9 +797,9 @@ run_pf:
     je      .pf_done
 
     # Select: three-level comparison (priority -> remaining -> index)
-    movq    $999999, %r8            # best priority (sentinel)
+    movabsq $0x7FFFFFFFFFFFFFFF, %r8  # best priority (sentinel)
     movq    $-1, %r9                # best index
-    movq    $999999, %r10           # best remaining
+    movabsq $0x7FFFFFFFFFFFFFFF, %r10 # best remaining
     xor     %rcx, %rcx
 
 .pf_select:

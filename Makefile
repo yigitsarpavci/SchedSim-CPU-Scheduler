@@ -8,7 +8,7 @@ OUTPUT_DIR=my-outputs
 all: $(EXEC)
 
 $(EXEC): $(OBJ)
-	ld -o $(EXEC) $(OBJ)
+	ld -static -o $(EXEC) $(OBJ)
 
 $(OBJ): $(SRC)
 	as -o $(OBJ) $(SRC)
