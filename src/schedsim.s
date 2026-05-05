@@ -258,6 +258,7 @@ parse_processes:
     jne     .quantum_parse_done
     movq    $1, (%rdi)
 .quantum_parse_done:
+    jmp     .parse_done
 
 .parse_process_descriptor:
     # Field 1: process ID (single uppercase letter)
