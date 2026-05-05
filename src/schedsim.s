@@ -187,10 +187,6 @@ parse_processes:
     movq    (%rdi), %r14            # r14 = algorithm type
 
 .parse_loop:
-    # Safety: enforce maximum of 10 processes to prevent memory corruption
-    cmp     $10, %r12
-    jge     .parse_done
-
     # Skip leading spaces
     movzbl  (%rsi), %eax
     cmp     $' ', %al
@@ -688,7 +684,7 @@ run_srtf:
     je      .srtf_done
 
     # Select: find arrived process with smallest remaining time
-    movabsq $0x7FFFFFFFFFFFFFFF, %r8  # best remaining (sentinel)
+    movq    $999999, %r8            # best remaining (sentinel)
     movq    $-1, %r9                # best index (none)
     xor     %rcx, %rcx
 
@@ -798,9 +794,9 @@ run_pf:
     je      .pf_done
 
     # Select: three-level comparison (priority -> remaining -> index)
-    movabsq $0x7FFFFFFFFFFFFFFF, %r8  # best priority (sentinel)
+    movq    $999999, %r8            # best priority (sentinel)
     movq    $-1, %r9                # best index
-    movabsq $0x7FFFFFFFFFFFFFFF, %r10 # best remaining
+    movq    $999999, %r10           # best remaining
     xor     %rcx, %rcx
 
 .pf_select:
