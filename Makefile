@@ -1,3 +1,4 @@
+PYTHON?=python3
 EXEC=schedsim
 SRC=src/schedsim.s
 OBJ=src/schedsim.o
@@ -23,7 +24,7 @@ testcases: $(EXEC)
 	done
 
 grade: testcases
-	python3 test/grader.py ./$(EXEC) $(TEST_DIR)
+	$(PYTHON) test/grader.py ./$(EXEC) $(TEST_DIR)
 
 testgrade: grade
 

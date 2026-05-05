@@ -64,7 +64,7 @@ The program supports five scheduling algorithms:
 The overall execution flow is:
 \begin{enumerate}
     \item Read up to 256 bytes from \texttt{stdin} via the \texttt{sys\_read} syscall.
-    \item Null-terminate the input buffer.
+    \item Null-terminate the input buffer and identify the end-of-input (handling both LF and CRLF line endings).
     \item Parse the first token to determine the algorithm type.
     \item Parse all process descriptors (and the quantum for RR) from the remaining input.
     \item Dispatch to the appropriate scheduling routine.

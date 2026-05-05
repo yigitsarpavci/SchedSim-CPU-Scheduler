@@ -98,7 +98,14 @@ _start:
 ##############################################################################
 parse_algorithm:
     lea     input_buf(%rip), %rsi
+.algo_skip_spaces:
     movzbl  (%rsi), %eax
+    cmp     $' ', %al
+    jne     .algo_identify
+    inc     %rsi
+    jmp     .algo_skip_spaces
+
+.algo_identify:
 
     cmp     $'F', %al
     je      .algo_fcfs
