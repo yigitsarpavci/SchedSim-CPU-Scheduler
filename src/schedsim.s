@@ -255,9 +255,9 @@ parse_processes:
     movq    %rax, (%rdi)
     # Safety fix: if quantum is 0, default to 1 to prevent infinite loop
     cmp     $0, %rax
-    jne     .parse_done
+    jne     .quantum_parse_done
     movq    $1, (%rdi)
-.parse_done:
+.quantum_parse_done:
 
 .parse_process_descriptor:
     # Field 1: process ID (single uppercase letter)
